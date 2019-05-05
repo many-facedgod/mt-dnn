@@ -160,6 +160,7 @@ class MTDNNModel(object):
             inputs.append(None)
             inputs.append(None)
         inputs.append(task_id)
+        inputs.append(batch_meta['prefix'])
         score = self.mnetwork(*inputs)
         if batch_meta['pairwise']:
             score = score.contiguous().view(-1, batch_meta['pairwise_size'])
