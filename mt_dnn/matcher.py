@@ -36,7 +36,7 @@ class SANBertNetwork(nn.Module):
         labels = [int(ls) for ls in opt['label_size'].split(',')]
         task_dropout_p = opt['tasks_dropout_p']
         self.bert_pooler = None
-
+        self.embedding_size = self.bert_config.hidden_size
         self.cluster_layers = nn.ModuleList()
         self.dropout_layers = nn.ModuleList()
         self.individual_layers = nn.ModuleList()
