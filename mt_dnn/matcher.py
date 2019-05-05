@@ -9,6 +9,17 @@ from torch.autograd import Variable
 from module.dropout_wrapper import DropoutWrapper
 from pytorch_pretrained_bert.modeling import BertConfig, BertEncoder, BertLayerNorm, BertModel
 from module.san import SANClassifier, Classifier
+import math
+
+
+def gelu(input):
+    return input * 0.5 * (1.0 + torch.erf(input / math.sqrt(2.0)))
+
+classifier_ids = {'mnli': 2, 'snli': 2, 'qqp': 1, 'qnli': 1, 'wnli': 1, 'rte': 1, 'mrpc': 1, 'sst': 1, 'stsb': 0, 'cola': 1}
+
+cluster_ids = {'mrpc': 0, 'stsb': 0, 'rte': 0, 'cola': 1, 'sst': 2}
+
+individual_ids = {'mrpc': 0, 'stsb': 1, 'rte': 2, 'cola': 3, 'sst': 4}
 
 class SANBertNetwork(nn.Module):
     def __init__(self, opt, bert_config=None):
@@ -26,16 +37,23 @@ class SANBertNetwork(nn.Module):
         task_dropout_p = opt['tasks_dropout_p']
         self.bert_pooler = None
 
-        for task, lab in enumerate(labels):
-            decoder_opt = self.decoder_opt[task]
-            dropout = DropoutWrapper(task_dropout_p[task], opt['vb_dropout'])
-            self.dropout_list.append(dropout)
-            if decoder_opt == 1:
-                out_proj = SANClassifier(mem_size, mem_size, lab, opt, prefix='answer', dropout=dropout)
-                self.scoring_list.append(out_proj)
+        self.cluster_layers = nn.ModuleList()
+        self.dropout_layers = nn.ModuleList()
+        self.individual_layers = nn.ModuleList()
+        for i in range(3):
+            layer = nn.Linear(self.embedding_size, self.embedding_size)
+            layer.weight.data.normal_(0.0, 0.02)
+            layer.bias.data.zero_()
+            self.dropout_layers.append(nn.Dropout(0.1))
+            self.cluster_layers.append(layer)
+        for i in range(5):
+            if i == 1:
+                layer = nn.Linear(self.embedding_size, 1)
             else:
-                out_proj = nn.Linear(self.bert_config.hidden_size, lab)
-                self.scoring_list.append(out_proj)
+                layer = nn.Linear(self.embedding_size, 2)
+            layer.weight.data.normal_(0.0, 0.02)
+            layer.bias.data.zero_()
+            self.individual_layers.append(layer)
 
         self.opt = opt
         self._my_init()
@@ -94,20 +112,12 @@ class SANBertNetwork(nn.Module):
             for p in bert_embeddings.position_embeddings.parameters():
                 p.requires_grad = False
 
-    def forward(self, input_ids, token_type_ids, attention_mask, premise_mask=None, hyp_mask=None, task_id=0):
+    def forward(self, input_ids, token_type_ids, attention_mask, premise_mask=None, hyp_mask=None, task_id=0, prefix=None):
         all_encoder_layers, pooled_output = self.bert(input_ids, token_type_ids, attention_mask)
         sequence_output = all_encoder_layers[-1]
         if self.bert_pooler is not None:
             pooled_output = self.bert_pooler(sequence_output)
-        decoder_opt = self.decoder_opt[task_id]
-        if decoder_opt == 1:
-            max_query = hyp_mask.size(1)
-            assert max_query > 0
-            assert premise_mask is not None
-            assert hyp_mask is not None
-            hyp_mem = sequence_output[:,:max_query,:]
-            logits = self.scoring_list[task_id](sequence_output, hyp_mem, premise_mask, hyp_mask)
-        else:
-            pooled_output = self.dropout_list[task_id](pooled_output)
-            logits = self.scoring_list[task_id](pooled_output)
-        return logits
+        cluster_id = cluster_ids[prefix]
+        individual_id = individual_ids[prefix]
+        h = gelu(self.cluster_layers[cluster_id](self.dropout_layers[cluster_id](pooled_output)))
+        return self.individual_layers[individual_id](h)

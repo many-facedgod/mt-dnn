@@ -22,7 +22,8 @@ class BatchGen:
                  pairwise=False,
                  task=None,
                  task_type=0,
-                 data_type=0):
+                 data_type=0,
+                 prefix=None):
         self.batch_size = batch_size
         self.maxlen = maxlen
         self.is_train = is_train
@@ -34,6 +35,7 @@ class BatchGen:
         self.pairwise_size = 1
         self.data_type = data_type
         self.task_type=task_type
+        self.prefix = prefix
         if do_batch:
             if is_train:
                 indices = list(range(len(self.data)))
@@ -174,6 +176,7 @@ class BatchGen:
             batch_info['pairwise'] = self.pairwise
             batch_info['pairwise_size'] = self.pairwise_size
             batch_info['task_type'] = self.task_type
+            batch_info['prefix'] = self.prefix
             if not self.is_train:
                 labels = [sample['label'] for sample in batch]
                 batch_info['label'] = labels
