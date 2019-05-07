@@ -55,6 +55,8 @@ class SANBertNetwork(nn.Module):
             layer.bias.data.zero_()
             self.individual_layers.append(layer)
 
+        #self.linear_bert = nn.Linear(self.bert_config.hidden_size, self.bert_config.hidden_size)
+        #self.tanh = nn.Tanh()
         self.opt = opt
         self._my_init()
         self.set_embed(opt)
@@ -114,7 +116,8 @@ class SANBertNetwork(nn.Module):
 
     def forward(self, input_ids, token_type_ids, attention_mask, premise_mask=None, hyp_mask=None, task_id=0, prefix=None):
         all_encoder_layers, pooled_output = self.bert(input_ids, token_type_ids, attention_mask)
-        sequence_output = all_encoder_layers[-1]
+        sequence_output = all_encoder_layers[-1] #Change to -2, -3, -4 for the various models for ensembles
+        #pooled_output = self.tanh(self.linear_bert(sequence_output[:, 0]))
         if self.bert_pooler is not None:
             pooled_output = self.bert_pooler(sequence_output)
         cluster_id = cluster_ids[prefix]
